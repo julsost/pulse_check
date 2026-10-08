@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Respiratory monitoring ideas: feasibility vs plausibility</title>
+<style>
+  :root{
+    --wood:#c9b79b; --wood-dark:#a8957a;
+    --hw:#c6e04a; --wet:#f5c24f; --sw:#e4eeea; --pink:#f0509a;
+    --ink:#23222b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#2b2a30;color:#f3efe6;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  header{padding:18px 24px 6px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
+  h1{font-size:1.15rem;font-weight:600;margin:0;flex:1 1 280px}
+  .filters{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{border:2px solid transparent;border-radius:999px;padding:6px 14px;font:inherit;font-size:.85rem;cursor:pointer;color:var(--ink)}
+  .chip[data-cat=hw]{background:var(--hw)}
+  .chip[data-cat=wet]{background:var(--wet)}
+  .chip[data-cat=sw]{background:var(--sw)}
+  .chip[data-cat=all]{background:#fff}
+  .chip[aria-pressed=false]{opacity:.35}
+  .chip:focus-visible{outline:3px solid #fff;outline-offset:2px}
+  .wrap{padding:12px 24px 28px;max-width:1300px;margin:0 auto}
+  .board{position:relative;width:100%;aspect-ratio:1210/980;background:
+    repeating-linear-gradient(0deg,rgba(0,0,0,.04) 0 2px,transparent 2px 70px),var(--wood);
+    border-radius:6px;overflow:hidden;container-type:inline-size}
+  svg.dowels{position:absolute;inset:0;width:100%;height:100%}
+  .n{position:absolute;padding:.9cqw .8cqw;font-family:"Segoe Print","Bradley Hand","Chalkboard SE","Comic Sans MS",cursive;
+     font-size:1.05cqw;line-height:1.28;color:var(--ink);box-shadow:0 .25cqw .6cqw rgba(0,0,0,.28);overflow:hidden;
+     transform:rotate(var(--r,0deg));transition:opacity .2s, transform .15s, box-shadow .15s}
+  .n,.pink{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+  .n.hw{background:var(--hw)} .n.wet{background:var(--wet)} .n.sw{background:var(--sw)}
+  .n.dim{opacity:.12}
+  .n:hover{transform:rotate(var(--r,0deg)) scale(1.03);z-index:5}
+  .dragging{cursor:grabbing !important;z-index:100 !important;transition:none !important;
+     transform:rotate(0deg) scale(1.06) !important;box-shadow:0 1cqw 2cqw rgba(0,0,0,.4) !important}
+  .adder{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .adder select,.adder button{font:inherit;font-size:.85rem;border-radius:999px;padding:6px 14px}
+  .adder select{background:#3a393f;color:#f3efe6;border:2px solid #6b6a72}
+  .adder .add{background:#f3efe6;color:var(--ink);border:2px solid #f3efe6;cursor:pointer;font-weight:600}
+  .adder select:focus-visible,.adder .add:focus-visible{outline:3px solid #fff;outline-offset:2px}
+  .n .t{outline:none;min-height:1.2em;white-space:pre-wrap}
+  .n.editing{cursor:text;box-shadow:0 0 0 .25cqw #fff,0 .6cqw 1.2cqw rgba(0,0,0,.4);z-index:90}
+  .n .del{position:absolute;top:.2cqw;right:.2cqw;width:1.7cqw;height:1.7cqw;min-width:18px;min-height:18px;border:0;border-radius:50%;
+     background:rgba(0,0,0,.55);color:#fff;font:inherit;font-size:1.1cqw;line-height:1;cursor:pointer;display:none;padding:0}
+  .n:hover .del,.n.editing .del,.n .del:focus-visible{display:block}
+  @media (hover:none){ .n .del{display:block;opacity:.6} }
+  .reset{background:transparent;color:#f3efe6;border:2px solid #6b6a72;border-radius:999px;padding:6px 14px;font:inherit;font-size:.85rem;cursor:pointer}
+  .reset:hover{border-color:#f3efe6}
+  .reset:focus-visible{outline:3px solid #fff;outline-offset:2px}
+  .n small{display:block;margin-top:.4cqw;font-size:.85cqw;opacity:.7}
+  .n s{opacity:.55}
+  .pink{position:absolute;background:var(--pink);color:#2a0f35;display:flex;flex-direction:column;align-items:center;justify-content:center;
+     font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive;font-size:1.15cqw;box-shadow:0 .25cqw .6cqw rgba(0,0,0,.28)}
+  .pink b{display:block;font-size:2.2cqw;line-height:1;margin-top:.4cqw;font-weight:400;border:.2cqw solid #2a0f35;border-radius:50%;width:2.8cqw;height:2.8cqw;text-align:center}
+  .note{max-width:78ch;margin:14px 2px 0;font-size:.85rem;color:#cfc9bb;line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <h1>Respiratory monitoring ideas, mapped by feasibility (across) and plausibility (up)</h1>
+  <div class="filters" role="group" aria-label="Filter by type">
+    <button class="chip" data-cat="all" aria-pressed="true">All</button>
+    <button class="chip" data-cat="hw" aria-pressed="true">Hardware</button>
+    <button class="chip" data-cat="wet" aria-pressed="true">Wetware</button>
+    <button class="chip" data-cat="sw" aria-pressed="true">Software</button>
+    <button class="reset" id="reset" type="button">Reset layout</button>
+  </div>
+  <div class="adder">
+    <label for="newType" class="sr" style="position:absolute;left:-9999px">Type of new note</label>
+    <select id="newType">
+      <option value="hw">Hardware (green)</option>
+      <option value="wet">Wetware (orange)</option>
+      <option value="sw">Software (white)</option>
+    </select>
+    <button class="add" id="addNote" type="button">+ Add note</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="board" id="board">
+    <svg class="dowels" viewBox="0 0 1210 980" preserveAspectRatio="none" aria-hidden="true">
+      <g stroke="#e8dcc3" stroke-linecap="round" stroke-width="11">
+        <line x1="543" y1="70" x2="545" y2="440"/>
+        <line x1="85" y1="510" x2="515" y2="483"/>
+        <line x1="602" y1="474" x2="1012" y2="483"/>
+        <line x1="545" y1="498" x2="563" y2="928"/>
+      </g>
+    </svg>
+  </div>
+  <p class="note">Digitized from your photo. Colors follow the originals: green = hardware, orange = wetware, white = software. A few words were hard to read in the handwriting; those are marked with [?]. Drag to move, double-click a note to edit its text (Esc to finish), and use the × that appears on hover to delete one.</p>
+</div>
+
+<script>
+// [x, y, w, h, rotation, category, html]  — coordinates in a 1210 x 980 space matching the photo
+const notes = [
+  // Key row
+  [188,47,100,46,0,'hw','Hardware'],
+  [296,40,100,46,0,'wet','Wetware'],
+  [404,34,102,52,0,'sw','Software'],
+
+  // Top-left: low feasibility, high plausibility
+  [125,128,105,92,0,'hw','Infrared camera that is high def and tracks how high the chest rises and falls through in depth pixel data to calculate respiratory [?] pressure and volume'],
+  [371,108,100,86,0,'wet','Vest made of mechanochromic [?] material that changes color with strain to tell if baby is struggling with exhaustion from breathing'],
+  [222,195,102,88,0,'wet','Oxygen-dependent patch that releases caffeine based on severity of apnea / blood oxygen<small>connect to hardware →</small>'],
+  [322,185,102,88,0,'wet','Bio temp tattoo that tracks oxygenation + CO2 + temp w/ sweat'],
+  [421,200,104,98,0,'hw','Smart N-95 mask that has sensors for SpO2, temperature to measure respiratory rate'],
+  [114,260,106,95,0,'hw','Smart socks that can flick [?] feet for apnea'],
+  [242,360,112,92,0,'wet','Detect obstructive &amp; mixed apnea of prematurity in Kenya to reduce duration of hypoxemic events'],
+  [394,340,106,100,0,'hw','PACU<br>Smart pillow for shallow breathing detection'],
+
+  // Top-right: high feasibility, high plausibility
+  [599,118,98,90,0,'hw','Thermistor near nose to measure RR and have a pressure sensor for work of breathing'],
+  [706,104,98,90,0,'hw','Sticker over lungs that quantifies stretch and RR'],
+  [817,108,100,86,0,'hw','A band/vest around ribs that can detect stretch which can measure work of breathing over time'],
+  [862,214,102,92,0,'sw','Whistle in the airway to track RR with high freq.'],
+  [971,317,111,94,0,'sw','Software: algorithm that prioritizes patients for RR checks based on vitals'],
+  [624,342,102,98,0,'sw','Dashboard that clearly labels trends in RR + AI summary to update pre shift change'],
+  [740,353,115,94,0,'wet','A patch that can help see how much anesthesia is still in patients\u2019 bloodstream before nurse gives other painkiller [?]'],
+
+  // Bottom-left: low feasibility, low plausibility
+  [172,507,116,116,0,'wet','Nanotech chip that has like a microcamera or microsensors to check for airway obstruction'],
+  [320,614,112,108,0,'hw','Lipstick for PACU patients that oxidises to blue based on how much they have breathed'],
+  [350,826,116,119,0,'sw','Algorithm that can rearrange nurses for most optimal assignment/rooms [?]'],
+
+  // Bottom-right: high feasibility, low plausibility
+  [597,588,104,102,0,'wet','Scent stimulant that aids patients post apnea'],
+  [747,507,121,111,0,'hw','Chest strap for patients breath measurement'],
+  [882,540,100,110,0,'sw','Algorithm that flags nurses that are missing respiratory decline signs for more training'],
+  [1018,538,114,102,0,'hw','Audio sensor to detect snoring/ airway comp.<br>+ software'],
+  [695,687,110,110,0,'wet','Patch to identify amount of anaesthesia in bloodstream'],
+  [811,631,126,121,0,'sw','App to train parents how to take RR/cap refill so they can add in data'],
+  [992,687,120,110,0,'hw','Blanket/mattress w/ vibration to reduce apnea'],
+  [817,772,122,121,0,'hw','Gyroscope/ accelerometer to measure guppy breathing'],
+  [970,792,128,124,0,'hw','Balloon or <s>riddle toy</s> fidget toy that measures pressure taken to squeeze in PACU patients to check residual neuromuscular blockade'],
+];
+
+// Pink axis labels: [x, y, w, h, text, sign]
+const labels = [
+  [531,27,100,88,'Plausibility','+'],
+  [568,800,100,100,'Plausibility','\u2212'],
+  [0,438,100,108,'Feasibility','\u2212'],
+  [998,430,100,100,'Feasibility','+'],
+];
+
+const W=1210,H=980, board=document.getElementById('board');
+const pct=(v,t)=>(v/t*100)+'%';
+
+let topZ=10;
+const startPos=new Map();
+
+// Drag: pointer events work for mouse, touch and pen
+function makeDraggable(el){
+  startPos.set(el,[el.style.left,el.style.top]);
+  el.addEventListener('pointerdown',e=>{
+    if(e.button!==undefined && e.button!==0) return;
+    if(el.classList.contains('editing')) return;   // let the cursor place/select text
+    const b=board.getBoundingClientRect();
+    const startX=e.clientX, startY=e.clientY;
+    const origL=parseFloat(el.style.left), origT=parseFloat(el.style.top);
+    const wPct=parseFloat(el.style.width), hPct=parseFloat(el.style.height);
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('dragging');
+    el.style.zIndex=++topZ;
+    const move=ev=>{
+      let l=origL+(ev.clientX-startX)/b.width*100;
+      let t=origT+(ev.clientY-startY)/b.height*100;
+      l=Math.min(Math.max(l,0),100-wPct);   // keep fully on the board
+      t=Math.min(Math.max(t,0),100-hPct);
+      el.style.left=l+'%'; el.style.top=t+'%';
+    };
+    const up=()=>{
+      el.classList.remove('dragging');
+      el.removeEventListener('pointermove',move);
+      el.removeEventListener('pointerup',up);
+      el.removeEventListener('pointercancel',up);
+    };
+    el.addEventListener('pointermove',move);
+    el.addEventListener('pointerup',up);
+    el.addEventListener('pointercancel',up);
+  });
+}
+
+labels.forEach(([x,y,w,h,t,s])=>{
+  const d=document.createElement('div'); d.className='pink';
+  Object.assign(d.style,{left:pct(x,W),top:pct(y,H),width:pct(w,W),height:pct(h,H)});
+  d.innerHTML=`${t}<b>${s}</b>`; board.appendChild(d); makeDraggable(d);
+});
+
+function createNote(x,y,w,h,c,html,i){
+  const d=document.createElement('div'); d.className='n '+c; d.dataset.cat=c;
+  Object.assign(d.style,{left:pct(x,W),top:pct(y,H),width:pct(w,W),height:pct(h,H)});
+  d.style.setProperty('--r',(((i*37)%7-3)*0.6)+'deg');
+  const t=document.createElement('div'); t.className='t'; t.innerHTML=html;
+  const del=document.createElement('button'); del.className='del'; del.type='button';
+  del.textContent='\u00d7'; del.setAttribute('aria-label','Delete note');
+  del.addEventListener('pointerdown',e=>e.stopPropagation());
+  del.addEventListener('click',()=>{ startPos.delete(d); d.remove(); });
+  d.append(t,del);
+  board.appendChild(d); makeDraggable(d);
+
+  // Double-click (or double-tap) to edit text
+  d.addEventListener('dblclick',()=>edit(d));
+  t.addEventListener('blur',()=>{
+    d.classList.remove('editing'); t.contentEditable='false';
+    if(!t.textContent.trim()){ startPos.delete(d); d.remove(); }   // empty notes disappear
+  });
+  t.addEventListener('keydown',e=>{ if(e.key==='Escape') t.blur(); });
+  return d;
+}
+function edit(d){
+  const t=d.querySelector('.t');
+  d.classList.add('editing'); t.contentEditable='true'; t.focus();
+  const r=document.createRange(); r.selectNodeContents(t); r.collapse(false);
+  const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+notes.forEach(([x,y,w,h,r,c,html],i)=>createNote(x,y,w,h,c,html,i));
+
+// Add a new note near the center of the board, ready to type in
+let added=0;
+document.getElementById('addNote').addEventListener('click',()=>{
+  const c=document.getElementById('newType').value;
+  active.add(c);                       // make sure its type isn't filtered out
+  apply();
+  const off=(added%6)*18;
+  const d=createNote(520+off,430+off,112,104,c,'',100+added);
+  d.style.zIndex=++topZ;
+  added++;
+  edit(d);
+});
+
+document.getElementById('reset').addEventListener('click',()=>{
+  startPos.forEach(([l,t],el)=>{ el.style.left=l; el.style.top=t; });
+});
+
+// Filters
+const chips=[...document.querySelectorAll('.chip')];
+const active=new Set(['hw','wet','sw']);
+function apply(){
+  document.querySelectorAll('.n').forEach(n=>n.classList.toggle('dim',!active.has(n.dataset.cat)));
+  chips.forEach(c=>{
+    const k=c.dataset.cat;
+    c.setAttribute('aria-pressed', k==='all' ? active.size===3 : active.has(k));
+  });
+}
+chips.forEach(c=>c.addEventListener('click',()=>{
+  const k=c.dataset.cat;
+  if(k==='all'){ ['hw','wet','sw'].forEach(x=>active.add(x)); }
+  else if(active.size===3){ active.clear(); active.add(k); }   // first click isolates a type
+  else if(active.has(k)){ active.delete(k); if(!active.size) ['hw','wet','sw'].forEach(x=>active.add(x)); }
+  else active.add(k);
+  apply();
+}));
+apply();
+</script>
+</body>
+</html>
